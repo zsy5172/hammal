@@ -11,6 +11,7 @@ const ORG_NAME_BACKEND:{ [key: string]: string; } = {
 }
 
 const DEFAULT_BACKEND_HOST: string = "https://registry-1.docker.io"
+const DOCKER_HUB_OFFICIAL_ACTIONS: string[] = ["manifests", "blobs", "tags", "referrers"]
 
 export async function handleRequest(request: Request): Promise<Response> {
   return handleRegistryRequest(request)
@@ -52,13 +53,31 @@ function rewritePathByOrg(orgName: string|null, pathname: string): string {
   return cleanSplitedPath.join("/")
 }
 
+function rewriteDockerHubOfficialPath(pathname: string): string {
+  const splitedPath: string[] = pathname.split("/")
+  if (splitedPath.length < 4 || splitedPath[1] !== "v2") {
+    return pathname
+  }
+  const name = splitedPath[2]
+  const action = splitedPath[3]
+  if (!name || name === "library") {
+    return pathname
+  }
+  if (!DOCKER_HUB_OFFICIAL_ACTIONS.includes(action)) {
+    return pathname
+  }
+  splitedPath.splice(2, 0, "library")
+  return splitedPath.join("/")
+}
+
 async function handleRegistryRequest(request: Request): Promise<Response> {
   const reqURL = new URL(request.url)
   const orgName = orgNameFromPath(reqURL.pathname)
   const pathname = rewritePathByOrg(orgName, reqURL.pathname)
   const host = hostByOrgName(orgName)
+  const rewrittenPathname = host === DEFAULT_BACKEND_HOST ? rewriteDockerHubOfficialPath(pathname) : pathname
   const tokenProvider = new TokenProvider()
   const backend = new Backend(host, tokenProvider)
   const headers = copyProxyHeaders(request.headers)
-  return backend.proxy(pathname, {headers: request.headers})
+  return backend.proxy(rewrittenPathname, {headers: request.headers})
 }
