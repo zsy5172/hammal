@@ -8,6 +8,7 @@ interface Token {
   token: string
   expires_in: number
 }
+type TokenResult = Token | Response
 
 function parseAuthenticateStr(authenticateStr: string): WwwAuthenticate {
   const bearer = authenticateStr.split(/\s+/, 2)
@@ -66,7 +67,7 @@ class TokenProvider {
     await HAMMAL_CACHE.put(cacheKey, JSON.stringify(token), {expirationTtl: token.expires_in})
   }
 
-  private async fetchToken(wwwAuthenticate: WwwAuthenticate): Promise<Token> {
+  private async fetchToken(wwwAuthenticate: WwwAuthenticate): Promise<TokenResult> {
     const url = new URL(wwwAuthenticate.realm)
     if (wwwAuthenticate.service.length) {
       url.searchParams.set("service", wwwAuthenticate.service)
@@ -77,23 +78,26 @@ class TokenProvider {
     // TODO: support basic auth
     const response = await fetch(url.toString(), {method: "GET", headers: {}})
     if (response.status !== 200) {
-      throw new Error(`Unable to fetch token from ${url.toString()} status code ${response.status}`)
+      return response
     }
     const body = await response.json()
     return {token: body.token, expires_in: body.expires_in}
   }
 
-  async token(authenticateStr: string): Promise<Token> {
+  async token(authenticateStr: string): Promise<TokenResult> {
     const wwwAuthenticate: WwwAuthenticate = parseAuthenticateStr(authenticateStr)
     const cacheKey = await this.authenticateCacheKey(wwwAuthenticate)
     const cachedToken: Token|null = await this.tokenFromCache(cacheKey)
     if (cachedToken !== null) {
       return cachedToken
     }
-    const token: Token = await this.fetchToken(wwwAuthenticate)
-    await this.tokenToCache(cacheKey, token)
-    return token
+    const tokenResult: TokenResult = await this.fetchToken(wwwAuthenticate)
+    if (tokenResult instanceof Response) {
+      return tokenResult
+    }
+    await this.tokenToCache(cacheKey, tokenResult)
+    return tokenResult
   }
 }
 
-export { TokenProvider, Token }
+export { TokenProvider, Token, TokenResult }

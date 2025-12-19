@@ -1,4 +1,4 @@
-import { TokenProvider, Token } from './token'
+import { TokenProvider } from './token'
 
 interface ProxyArgs {
   headers: Headers
@@ -28,9 +28,12 @@ class Backend {
     if (authenticateStr === null || this.tokenProvider === undefined) {
       return response
     }
-    const token: Token = await this.tokenProvider.token(authenticateStr)
+    const tokenResult = await this.tokenProvider.token(authenticateStr)
+    if (tokenResult instanceof Response) {
+      return tokenResult
+    }
     const authenticatedHeaders = new Headers(args.headers)
-    authenticatedHeaders.append("Authorization", `Bearer ${token.token}`)
+    authenticatedHeaders.append("Authorization", `Bearer ${tokenResult.token}`)
     return await fetch(url.toString(), {method: "GET", headers:authenticatedHeaders, redirect: "follow"})
   }
 }
